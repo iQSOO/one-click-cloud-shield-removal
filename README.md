@@ -1,13 +1,14 @@
-# one-click-cloud-shield-removal
-一键卸载阿里云/腾讯云云盾的实用脚本，由 iqsoo.com 提供。
-# One Click Cloud Shield Removal
+# 一键卸载云盾脚本（支持阿里云 / 腾讯云）
 
-来自 [iqsoo.com](https://www.iqsoo.com) 的实用工具脚本，支持一键卸载以下云服务中的安全组件：
+由 [iQSOO.com](https://www.iqsoo.com) 提供的实用工具脚本，支持快速卸载国内云服务器中常见的“云盾”安全监控服务，兼容阿里云、腾讯云。
 
-- 阿里云盾（Aliyun Aegis）
-- 腾讯云盾（Yunjing、Tat Agent、Barad Agent）
+> 项目地址：[GitHub 仓库](https://github.com/iQSOO/one-click-cloud-shield-removal)
+
+---
 
 ## 一键运行命令
+
+复制下方命令，在你的 Linux 服务器中粘贴运行：
 
 ```bash
 bash <(curl -sSL https://raw.githubusercontent.com/iQSOO/one-click-cloud-shield-removal/main/ugq.sh)
