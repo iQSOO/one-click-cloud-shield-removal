@@ -10,4 +10,4 @@
 ## 一键运行命令
 
 ```bash
-bash <(curl -sSL https://raw.githubusercontent.com/iqsoo/one-click-cloud-shield/main/ugq.sh)
+bash <(curl -sSL https://raw.githubusercontent.com/iQSOO/one-click-cloud-shield-removal/main/ugq.sh)
