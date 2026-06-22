@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - iqsoo-shield-build
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -96,7 +99,6 @@ jobs:
           p.write_text(s)
           PY
 
-          # Make the generated APK name independent from the upstream product name.
           grep -n 'applicationId\|archivesName' "$BUILD_FILE"
           grep -n 'app_name' "$APP_DIR/app/src/main/res/values/strings.xml" | head
 
