@@ -1,0 +1,56 @@
+name: Extract iQSOO Shield APKs
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: iqsoo-shield-extract-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SOURCE_RUN_ID: "27983297517"
+      SOURCE_ARTIFACT: "iQSOO-Shield-1.13.13"
+    steps:
+      - name: Download successful full build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir source-artifact
+          gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir source-artifact
+          find source-artifact -type f -maxdepth 4 -printf '%p %s bytes\n'
+
+      - name: Select ARM64 and universal APKs
+        run: |
+          set -euxo pipefail
+          mkdir -p selected-apks
+          mapfile -t apks < <(find source-artifact -type f -name '*.apk' | sort)
+          printf '%s\n' "${apks[@]}"
+          for apk in "${apks[@]}"; do
+            name="$(basename "$apk")"
+            case "$name" in
+              *arm64-v8a*.apk|*universal*.apk) cp "$apk" selected-apks/ ;;
+            esac
+          done
+          test "$(find selected-apks -type f -name '*.apk' | wc -l)" -ge 2
+          sha256sum selected-apks/*.apk | tee selected-apks/SHA256SUMS.txt
+          cp source-artifact/BUILD-INFO.txt selected-apks/ 2>/dev/null || true
+          ls -lh selected-apks
+
+      - name: Upload selected APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: iQSOO-Shield-1.13.13-APKs
+          path: selected-apks
+          if-no-files-found: error
+          retention-days: 30
