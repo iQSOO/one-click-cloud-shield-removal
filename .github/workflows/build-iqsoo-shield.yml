@@ -120,8 +120,10 @@ jobs:
         run: |
           set -euxo pipefail
           APP_DIR="upstream/clients/android"
+          rm -f "$APP_DIR/app/release.keystore"
           keytool -genkeypair -v \
             -keystore "$APP_DIR/app/release.keystore" \
+            -storetype PKCS12 \
             -storepass "iqsoo-shield-build" \
             -keypass "iqsoo-shield-build" \
             -alias "iqsoo-shield" \
