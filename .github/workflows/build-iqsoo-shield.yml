@@ -1,4 +1,4 @@
-name: Build iQSOO Shield APK
+name: Extract iQSOO Shield APKs
 
 on:
   pull_request:
@@ -7,105 +7,50 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: iqsoo-shield-pr-${{ github.event.pull_request.number || github.ref }}
+  group: iqsoo-shield-extract-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-env:
-  SING_BOX_VERSION: "1.13.13"
-  APP_ID: "com.iqsoo.shield"
-
 jobs:
-  build:
+  extract:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 30
+    env:
+      SOURCE_RUN_ID: "27983297517"
+      SOURCE_ARTIFACT: "iQSOO-Shield-1.13.13"
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Checkout upstream
-        run: |
-          set -euxo pipefail
-          git clone --branch "v${SING_BOX_VERSION}" --depth 1 --recurse-submodules --shallow-submodules https://github.com/SagerNet/sing-box.git upstream
-          cd upstream
-          git submodule update --init --recursive --depth 1
-          git tag "v${SING_BOX_VERSION}" -f
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.25.10"
-          cache-dependency-path: upstream/go.sum
-
-      - id: ndk
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r28
-          local-cache: false
-
-      - name: Validate NDK
-        run: |
-          set -euxo pipefail
-          CLANG="${{ steps.ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
-          test -x "$CLANG"
-          "$CLANG" --version
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-
-      - name: Apply product patch
-        run: |
-          set -euxo pipefail
-          APP="upstream/clients/android"
-          BUILD="$APP/app/build.gradle.kts"
-          SETTINGS="$APP/app/src/main/java/io/nekohasekai/sfa/database/Settings.kt"
-          MANIFEST="$APP/app/src/main/AndroidManifest.xml"
-          sed -i 's/applicationId = "io.nekohasekai.sfa"/applicationId = "com.iqsoo.shield"/' "$BUILD"
-          sed -i 's/base.archivesName.set("SFA-${versionName}")/base.archivesName.set("iQSOO-Shield-${versionName}")/' "$BUILD"
-          find "$APP/app/src/main/res" -path '*/values*/strings.xml' -type f -print0 | xargs -0 sed -i -E 's#<string name="app_name"[^>]*>[^<]*</string>#<string name="app_name" translatable="false">iQSOO 隐私网络</string>#'
-          sed -i 's/android:allowBackup="true"/android:allowBackup="false"/' "$MANIFEST"
-          grep -q 'checkUpdateEnabled.*false' "$SETTINGS"
-          grep -q 'autoUpdateEnabled.*false' "$SETTINGS"
-          grep -q 'allowBypass.*false' "$SETTINGS"
-
-      - name: Build libbox
-        working-directory: upstream
+      - name: Download successful full build
         env:
-          JAVA_HOME: ${{ env.JAVA_HOME }}
-          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euxo pipefail
-          make lib_install
-          export PATH="$PATH:$(go env GOPATH)/bin"
-          make lib_android
-          mkdir -p clients/android/app/libs
-          cp ./*.aar clients/android/app/libs/
+          mkdir source-artifact
+          gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir source-artifact
+          find source-artifact -type f -maxdepth 4 -printf '%p %s bytes\n'
 
-      - name: Sign and build APK
+      - name: Select ARM64 and universal APKs
         run: |
           set -euxo pipefail
-          APP="upstream/clients/android"
-          rm -f "$APP/app/release.keystore"
-          keytool -genkeypair -keystore "$APP/app/release.keystore" -storetype PKCS12 -storepass iqsoo-shield-build -keypass iqsoo-shield-build -alias iqsoo-shield -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=iQSOO Shield, OU=iQSOO, O=iQSOO, C=CN"
-          printf '%s\n' 'KEYSTORE_PASS=iqsoo-shield-build' 'ALIAS_NAME=iqsoo-shield' 'ALIAS_PASS=iqsoo-shield-build' > "$APP/local.properties"
-          cd "$APP"
-          chmod +x gradlew
-          ANDROID_NDK_HOME="${{ steps.ndk.outputs.ndk-path }}" ./gradlew --no-daemon --stacktrace :app:assembleOtherRelease
+          mkdir -p selected-apks
+          mapfile -t apks < <(find source-artifact -type f -name '*.apk' | sort)
+          printf '%s\n' "${apks[@]}"
+          for apk in "${apks[@]}"; do
+            name="$(basename "$apk")"
+            case "$name" in
+              *arm64-v8a*.apk|*universal*.apk) cp "$apk" selected-apks/ ;;
+            esac
+          done
+          test "$(find selected-apks -type f -name '*.apk' | wc -l)" -ge 2
+          sha256sum selected-apks/*.apk | tee selected-apks/SHA256SUMS.txt
+          cp source-artifact/BUILD-INFO.txt selected-apks/ 2>/dev/null || true
+          ls -lh selected-apks
 
-      - name: Package
-        run: |
-          set -euxo pipefail
-          mkdir -p dist/apk dist/source
-          cp upstream/clients/android/app/build/outputs/apk/other/release/*.apk dist/apk/
-          for apk in dist/apk/*.apk; do jarsigner -verify -certs "$apk"; sha256sum "$apk"; done | tee dist/SHA256SUMS.txt
-          printf '%s\n' 'Product: iQSOO 隐私网络' "Application ID: ${APP_ID}" "Core: sing-box ${SING_BOX_VERSION}" 'Android backup: disabled' 'Source license: GPL-3.0-or-later' > dist/BUILD-INFO.txt
-          tar --exclude='.git' --exclude='**/build' --exclude='**/.gradle' -czf "dist/source/iqsoo-shield-${SING_BOX_VERSION}-source.tar.gz" -C upstream .
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload selected APKs
+        uses: actions/upload-artifact@v4
         with:
-          name: iQSOO-Shield-${{ env.SING_BOX_VERSION }}
-          path: dist
+          name: iQSOO-Shield-1.13.13-APKs
+          path: selected-apks
           if-no-files-found: error
           retention-days: 30
