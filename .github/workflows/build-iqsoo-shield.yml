@@ -1,9 +1,6 @@
 name: Build iQSOO Shield APK
 
 on:
-  push:
-    branches:
-      - iqsoo-shield-build
   pull_request:
     branches:
       - main
@@ -13,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: iqsoo-shield-${{ github.ref }}
+  group: iqsoo-shield-pr-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -68,21 +65,17 @@ jobs:
           SETTINGS_FILE="$APP_DIR/app/src/main/java/io/nekohasekai/sfa/database/Settings.kt"
           MANIFEST="$APP_DIR/app/src/main/AndroidManifest.xml"
 
-          # Keep the upstream Kotlin namespace for compatibility; use an independent install ID.
           sed -i 's/applicationId = "io.nekohasekai.sfa"/applicationId = "com.iqsoo.shield"/' "$BUILD_FILE"
           sed -i 's/base.archivesName.set("SFA-${versionName}")/base.archivesName.set("iQSOO-Shield-${versionName}")/' "$BUILD_FILE"
 
-          # Independent product name in every locale while retaining upstream translations.
           find "$APP_DIR/app/src/main/res" -path '*/values*/strings.xml' -type f -print0 | \
             xargs -0 sed -i -E 's#<string name="app_name"[^>]*>[^<]*</string>#<string name="app_name" translatable="false">iQSOO 隐私网络</string>#'
 
-          # Privacy defaults: no cloud update polling, no auto update, no bypass, no Android backup.
           sed -i 's/var checkUpdateEnabled by dataStore.boolean(SettingsKey.CHECK_UPDATE_ENABLED) { true }/var checkUpdateEnabled by dataStore.boolean(SettingsKey.CHECK_UPDATE_ENABLED) { false }/' "$SETTINGS_FILE" || true
           sed -i 's/var autoUpdateEnabled by dataStore.boolean(SettingsKey.AUTO_UPDATE_ENABLED) { true }/var autoUpdateEnabled by dataStore.boolean(SettingsKey.AUTO_UPDATE_ENABLED) { false }/' "$SETTINGS_FILE" || true
           sed -i 's/var allowBypass by dataStore.boolean(SettingsKey.ALLOW_BYPASS) { true }/var allowBypass by dataStore.boolean(SettingsKey.ALLOW_BYPASS) { false }/' "$SETTINGS_FILE" || true
           sed -i 's/android:allowBackup="true"/android:allowBackup="false"/' "$MANIFEST"
 
-          # Add the iQSOO import URI without removing sing-box compatibility.
           python3 - <<'PY'
           from pathlib import Path
           p = Path("upstream/clients/android/app/src/main/AndroidManifest.xml")
@@ -111,7 +104,12 @@ jobs:
           set -euxo pipefail
           make lib_install
           export PATH="$PATH:$(go env GOPATH)/bin"
-          make lib_android
+          if ! make lib_android; then
+            echo "First libbox build failed; clearing only generated outputs and retrying once"
+            rm -f ./*.aar
+            sleep 10
+            make lib_android
+          fi
           mkdir -p clients/android/app/libs
           cp ./*.aar clients/android/app/libs/
           ls -lh clients/android/app/libs
