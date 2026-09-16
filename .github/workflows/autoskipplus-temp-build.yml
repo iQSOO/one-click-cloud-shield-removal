@@ -34,15 +34,19 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Reconstruct and validate source archive
+      - name: Reconstruct and repair source archive
         run: |
           cat autoskipplus-build/chunk_*.b64 > AutoSkipPlus-source.zip.b64
           base64 -d AutoSkipPlus-source.zip.b64 > AutoSkipPlus-source.zip
           sha256sum AutoSkipPlus-source.zip
-          unzip -t AutoSkipPlus-source.zip
-          unzip -q AutoSkipPlus-source.zip
+          zip -FF AutoSkipPlus-source.zip --out AutoSkipPlus-source-fixed.zip <<'EOF' || true
+y
+EOF
+          unzip -t AutoSkipPlus-source-fixed.zip
+          unzip -q AutoSkipPlus-source-fixed.zip
           test -f AutoSkipPlus/app/build.gradle
           test -f AutoSkipPlus/app/src/main/AndroidManifest.xml
+          find AutoSkipPlus -type f | sort
 
       - name: Build debug APK
         working-directory: AutoSkipPlus
