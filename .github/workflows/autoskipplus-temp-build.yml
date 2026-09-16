@@ -17,23 +17,24 @@ jobs:
       - name: Checkout temporary build branch
         uses: actions/checkout@v4
 
-      - name: Reconstruct transferred source
+      - name: Reconstruct and correct transferred source
         run: |
           cat autoskipplus-build/chunk_*.b64 > AutoSkipPlus-source.zip.b64
           base64 -d AutoSkipPlus-source.zip.b64 > AutoSkipPlus-source.zip
-          sha256sum AutoSkipPlus-source.zip
-          stat -c '%s bytes' AutoSkipPlus-source.zip
-
-      - name: Upload reconstructed source for byte comparison
-        uses: actions/upload-artifact@v4
-        with:
-          name: AutoSkipPlus-transferred-source
-          path: AutoSkipPlus-source.zip
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Validate source checksum
-        run: echo '19d2f512cc7591f82b33cc4bf0ad107e658bcb6f0bc38a5c529897cc18802198  AutoSkipPlus-source.zip' | sha256sum -c -
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('AutoSkipPlus-source.zip')
+          b = bytearray(p.read_bytes())
+          if len(b) != 40716:
+              raise SystemExit(f'unexpected transferred size: {len(b)}')
+          b[27114:27116] = bytes.fromhex('8a28')
+          del b[36012:36024]
+          p.write_bytes(b)
+          print('corrected size:', len(b))
+          PY
+          echo '19d2f512cc7591f82b33cc4bf0ad107e658bcb6f0bc38a5c529897cc18802198  AutoSkipPlus-source.zip' | sha256sum -c -
+          unzip -t AutoSkipPlus-source.zip
+          unzip -q AutoSkipPlus-source.zip
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -52,9 +53,6 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Extract source
-        run: unzip -q AutoSkipPlus-source.zip
-
       - name: Build debug APK
         working-directory: AutoSkipPlus
         run: gradle :app:assembleDebug --stacktrace --no-daemon
@@ -64,6 +62,7 @@ jobs:
           test -f AutoSkipPlus/app/build/outputs/apk/debug/app-debug.apk
           ls -lh AutoSkipPlus/app/build/outputs/apk/debug/app-debug.apk
           sha256sum AutoSkipPlus/app/build/outputs/apk/debug/app-debug.apk
+          unzip -t AutoSkipPlus/app/build/outputs/apk/debug/app-debug.apk >/dev/null
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
