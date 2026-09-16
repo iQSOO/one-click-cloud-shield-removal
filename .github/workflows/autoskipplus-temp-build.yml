@@ -17,6 +17,24 @@ jobs:
       - name: Checkout temporary build branch
         uses: actions/checkout@v4
 
+      - name: Reconstruct transferred source
+        run: |
+          cat autoskipplus-build/chunk_*.b64 > AutoSkipPlus-source.zip.b64
+          base64 -d AutoSkipPlus-source.zip.b64 > AutoSkipPlus-source.zip
+          sha256sum AutoSkipPlus-source.zip
+          stat -c '%s bytes' AutoSkipPlus-source.zip
+
+      - name: Upload reconstructed source for byte comparison
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoSkipPlus-transferred-source
+          path: AutoSkipPlus-source.zip
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Validate source checksum
+        run: echo '19d2f512cc7591f82b33cc4bf0ad107e658bcb6f0bc38a5c529897cc18802198  AutoSkipPlus-source.zip' | sha256sum -c -
+
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
@@ -34,17 +52,8 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Reconstruct and repair source archive
-        run: |
-          cat autoskipplus-build/chunk_*.b64 > AutoSkipPlus-source.zip.b64
-          base64 -d AutoSkipPlus-source.zip.b64 > AutoSkipPlus-source.zip
-          sha256sum AutoSkipPlus-source.zip
-          printf 'y\n' | zip -FF AutoSkipPlus-source.zip --out AutoSkipPlus-source-fixed.zip || true
-          unzip -t AutoSkipPlus-source-fixed.zip
-          unzip -q AutoSkipPlus-source-fixed.zip
-          test -f AutoSkipPlus/app/build.gradle
-          test -f AutoSkipPlus/app/src/main/AndroidManifest.xml
-          find AutoSkipPlus -type f | sort
+      - name: Extract source
+        run: unzip -q AutoSkipPlus-source.zip
 
       - name: Build debug APK
         working-directory: AutoSkipPlus
