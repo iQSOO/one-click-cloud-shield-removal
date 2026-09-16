@@ -36,6 +36,14 @@ jobs:
           unzip -t AutoSkipPlus-source.zip
           unzip -q AutoSkipPlus-source.zip
 
+      - name: Apply rule center v1.0.1 patch
+        working-directory: AutoSkipPlus
+        run: |
+          patch --batch -p1 < ../autoskipplus-patch/rules_ui_v101.patch
+          grep -n "versionName '1.0.1'" app/build.gradle
+          grep -n 'TextView edit = actionText("编辑"' app/src/main/java/com/iqsoo/autoskip/RulesActivity.java
+          grep -n 'Button delete = Ui.secondaryButton(this, "删除此规则")' app/src/main/java/com/iqsoo/autoskip/RuleEditActivity.java
+
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
@@ -67,7 +75,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AutoSkipPlus-debug-apk
+          name: AutoSkipPlus-v1.0.1-debug-apk
           path: AutoSkipPlus/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 1
