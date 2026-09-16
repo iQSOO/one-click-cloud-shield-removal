@@ -39,9 +39,7 @@ jobs:
           cat autoskipplus-build/chunk_*.b64 > AutoSkipPlus-source.zip.b64
           base64 -d AutoSkipPlus-source.zip.b64 > AutoSkipPlus-source.zip
           sha256sum AutoSkipPlus-source.zip
-          zip -FF AutoSkipPlus-source.zip --out AutoSkipPlus-source-fixed.zip <<'EOF' || true
-y
-EOF
+          printf 'y\n' | zip -FF AutoSkipPlus-source.zip --out AutoSkipPlus-source-fixed.zip || true
           unzip -t AutoSkipPlus-source-fixed.zip
           unzip -q AutoSkipPlus-source-fixed.zip
           test -f AutoSkipPlus/app/build.gradle
